@@ -10,79 +10,74 @@
 </head>
 <body class="bg-white text-gray-900 min-h-screen flex flex-col font-sans">
 
-  <!-- ヘッダー検索エリア -->
-  <header class="border-b p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
-    <h1 class="text-lg font-bold cursor-pointer" onclick="location.hash=''; loadNotes(); showDefaultView();">Wiki</h1>
-    <div class="w-full sm:w-2/3 flex gap-2">
-      <!-- タイトル検索 -->
-      <input type="text" id="titleSearchInput" placeholder="タイトルで探す..." class="w-1/2 border px-3 py-1.5 text-sm rounded focus:outline-none focus:border-black" oninput="searchByTitle(this.value)">
-      <!-- 全文検索 -->
-      <input type="text" id="fullSearchInput" placeholder="本文全文から探す..." class="w-1/2 border px-3 py-1.5 text-sm rounded focus:outline-none focus:border-black" oninput="searchByFullText(this.value)">
-      <button onclick="openEditor()" class="bg-black text-white px-4 py-1.5 text-sm rounded hover:bg-gray-800 whitespace-nowrap">+ 新規</button>
-    </div>
+  <!-- ヘッダー -->
+  <header class="border-b px-4 py-3 flex justify-between items-center bg-white sticky top-0 z-10">
+    <h1 class="text-base font-bold cursor-pointer" onclick="showListView()">Wiki</h1>
+    <button onclick="openEditor()" class="bg-black text-white px-3 py-1.5 text-xs rounded font-medium">+ 新規ノート</button>
   </header>
 
-  <!-- メインレイアウト -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 md:grid-cols-4 gap-6">
-    
-    <!-- サイドバー: ノート一覧 -->
-    <aside class="md:col-span-1 border-r pr-4 flex flex-col gap-2">
-      <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">ノート一覧</div>
-      <ul id="notesList" class="space-y-1 overflow-y-auto max-h-[70vh] text-sm">
+  <!-- メイン領域 -->
+  <main class="flex-1 max-w-3xl w-full mx-auto p-4 flex flex-col gap-4">
+
+    <!-- 1. 一覧ページ -->
+    <div id="listView" class="space-y-4">
+      <div class="flex gap-2">
+        <input type="text" id="titleSearchInput" placeholder="タイトルで探す..." class="w-1/2 border px-3 py-2 text-sm rounded focus:outline-none focus:border-black" oninput="searchByTitle(this.value)">
+        <input type="text" id="fullSearchInput" placeholder="全文から探す..." class="w-1/2 border px-3 py-2 text-sm rounded focus:outline-none focus:border-black" oninput="searchByFullText(this.value)">
+      </div>
+      <ul id="notesList" class="divide-y divide-gray-100 border-t border-b">
         <!-- 動的読込 -->
       </ul>
-    </aside>
+    </div>
 
-    <!-- メイン表示・編集エリア -->
-    <section class="md:col-span-3 flex flex-col gap-4">
-      
-      <!-- 閲覧モード -->
-      <div id="viewMode" class="space-y-4">
-        <div class="flex justify-between items-start border-b pb-3">
-          <h2 id="viewTitle" class="text-2xl font-bold"></h2>
-          <div class="flex gap-2">
-            <button id="editBtn" class="border px-3 py-1 text-xs rounded hover:bg-gray-100 hidden" onclick="switchToEdit()">編集</button>
-            <button id="copyLinkBtn" class="border px-3 py-1 text-xs rounded hover:bg-gray-100 hidden" onclick="copyNoteLink()">リンクコピー</button>
-          </div>
-        </div>
-
-        <!-- 目次 -->
-        <div id="tocContainer" class="bg-gray-50 p-3 text-xs hidden">
-          <div class="font-bold text-gray-600 mb-1">目次</div>
-          <ul id="tocList" class="space-y-0.5 text-blue-600"></ul>
-        </div>
-
-        <div id="viewBody" class="prose max-w-none text-sm leading-relaxed">
-          ノートを選択してください。
+    <!-- 2. 詳細閲覧ページ -->
+    <div id="detailView" class="space-y-4 hidden">
+      <button onclick="showListView()" class="text-xs text-gray-500 hover:text-black mb-2">&larr; 一覧に戻る</button>
+      <div class="flex justify-between items-start border-b pb-3">
+        <h2 id="viewTitle" class="text-xl font-bold"></h2>
+        <div class="flex gap-2">
+          <button onclick="switchToEdit()" class="border px-3 py-1 text-xs rounded hover:bg-gray-100">編集</button>
         </div>
       </div>
-
-      <!-- 編集 / 作成モード -->
-      <div id="editMode" class="space-y-3 hidden">
-        <input type="hidden" id="editId">
-        <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">タイトル</label>
-          <input type="text" id="formTitle" class="w-full border px-3 py-1.5 text-sm rounded focus:outline-none focus:border-black" placeholder="タイトルを入力">
-        </div>
-        <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">スラッグ（URLリンク用ID: 半角英数字とハイフン。例: sample-note）</label>
-          <input type="text" id="formSlug" class="w-full border px-3 py-1.5 text-sm rounded font-mono focus:outline-none focus:border-black" placeholder="url-slug">
-        </div>
-        <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">本文 (Markdown形式 / `## 見出し` で目次が自動生成されます)</label>
-          <textarea id="formContent" rows="14" class="w-full border px-3 py-1.5 text-sm rounded font-mono focus:outline-none focus:border-black" placeholder="本文..."></textarea>
-        </div>
-        <div class="flex justify-end gap-2">
-          <button onclick="cancelEdit()" class="border px-4 py-1.5 text-sm rounded hover:bg-gray-100">キャンセル</button>
-          <button onclick="saveNote()" class="bg-black text-white px-4 py-1.5 text-sm rounded hover:bg-gray-800">保存</button>
-        </div>
+      <!-- 目次 / 折り畳み目次 -->
+      <div id="tocContainer" class="bg-gray-50 p-3 text-xs rounded hidden">
+        <div class="font-bold text-gray-600 mb-1">目次</div>
+        <ul id="tocList" class="space-y-1 text-blue-600"></ul>
       </div>
+      <div id="viewBody" class="prose max-w-none text-sm leading-relaxed overflow-x-auto">
+        <!-- 本文 -->
+      </div>
+    </div>
 
-    </section>
+    <!-- 3. 編集 / 作成ページ -->
+    <div id="editView" class="space-y-4 hidden">
+      <button onclick="cancelEdit()" class="text-xs text-gray-500 hover:text-black mb-2">&larr; 戻る</button>
+      <input type="hidden" id="editId">
+      <div>
+        <label class="block text-xs font-bold text-gray-500 mb-1">タイトル</label>
+        <input type="text" id="formTitle" class="w-full border px-3 py-2 text-sm rounded focus:outline-none focus:border-black" placeholder="タイトル">
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 mb-1">スラッグ（半角英数字とハイフン: 例 sample-note）</label>
+        <input type="text" id="formSlug" class="w-full border px-3 py-2 text-sm rounded font-mono focus:outline-none focus:border-black" placeholder="url-slug">
+      </div>
+      <div>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-xs font-bold text-gray-500">本文 (Markdown)</label>
+          <!-- スマホでも簡単に使える折り畳み見出し挿入ボタン -->
+          <button type="button" onclick="insertDetailsTag()" class="bg-gray-100 hover:bg-gray-200 border px-2 py-0.5 text-xs rounded text-gray-700">＋ 折り畳み見出し</button>
+        </div>
+        <textarea id="formContent" rows="16" class="w-full border px-3 py-2 text-sm rounded font-mono focus:outline-none focus:border-black" placeholder="長文はこちらに..."></textarea>
+      </div>
+      <div class="flex justify-end gap-2 pb-8">
+        <button onclick="cancelEdit()" class="border px-4 py-2 text-sm rounded hover:bg-gray-100">キャンセル</button>
+        <button onclick="saveNote()" class="bg-black text-white px-4 py-2 text-sm rounded hover:bg-gray-800">保存</button>
+      </div>
+    </div>
+
   </main>
 
   <script>
-    // --- ご自身のSupabase情報に書き換えてください ---
     const SUPABASE_URL = 'https://YOUR_SUPABASE_PROJECT_ID.supabase.co';
     const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
     
@@ -100,20 +95,18 @@
       const hash = window.location.hash.substring(1);
       if (hash) {
         loadNoteBySlug(hash);
+      } else {
+        showListView();
       }
     }
 
-    // ノート一覧の取得とキャッシュ
     async function loadNotes() {
       const { data, error } = await supabaseClient
         .from('notes')
         .select('id, title, slug, updated_at')
         .order('title', { ascending: true });
 
-      if (error) {
-        console.error(error);
-        return;
-      }
+      if (error) return;
       allNotesCache = data || [];
       renderNotesList(allNotesCache);
     }
@@ -121,49 +114,40 @@
     function renderNotesList(notes) {
       const listEl = document.getElementById('notesList');
       if (!notes.length) {
-        listEl.innerHTML = '<li class="text-gray-400 text-xs">ノートなし</li>';
+        listEl.innerHTML = '<li class="py-3 text-gray-400 text-xs text-center">ノートがありません</li>';
         return;
       }
       listEl.innerHTML = notes.map(note => `
         <li>
-          <a href="#${note.slug}" onclick="loadNoteBySlug('${note.slug}')" class="text-blue-600 hover:underline block truncate py-0.5">
+          <a href="#${note.slug}" onclick="loadNoteBySlug('${note.slug}')" class="block py-3 px-2 hover:bg-gray-50 truncate text-sm font-medium">
             ${escapeHtml(note.title)}
           </a>
         </li>
       `).join('');
     }
 
-    // 1. タイトルによる絞り込み検索（インメモリ）
     function searchByTitle(query) {
       const q = query.trim().toLowerCase();
       if (!q) {
         renderNotesList(allNotesCache);
         return;
       }
-      const filtered = allNotesCache.filter(n => n.title.toLowerCase().includes(q));
-      renderNotesList(filtered);
+      renderNotesList(allNotesCache.filter(n => n.title.toLowerCase().includes(q)));
     }
 
-    // 2. 本文の全文検索（Supabase Full-Text Search）
     async function searchByFullText(query) {
       const q = query.trim();
       if (!q) {
         loadNotes();
         return;
       }
-      const { data, error } = await supabaseClient
+      const { data } = await supabaseClient
         .from('notes')
         .select('id, title, slug')
         .textSearch('search_vector', q);
-
-      if (error) {
-        console.error(error);
-        return;
-      }
       renderNotesList(data || []);
     }
 
-    // スラッグ指定でノート読み込み
     async function loadNoteBySlug(slug) {
       const { data, error } = await supabaseClient
         .from('notes')
@@ -171,34 +155,50 @@
         .eq('slug', slug)
         .single();
 
-      if (error || !data) {
-        return;
-      }
+      if (error || !data) return;
 
       currentNote = data;
       document.getElementById('viewTitle').textContent = data.title;
-      document.getElementById('viewBody').innerHTML = marked.parse(data.content);
-      document.getElementById('editBtn').classList.remove('hidden');
-      document.getElementById('copyLinkBtn').classList.remove('hidden');
       
+      // Markdown変換（リンクやHTMLタグ対応）
+      let parsedHtml = marked.parse(data.content);
+      document.getElementById('viewBody').innerHTML = parsedHtml;
+
+      // ノート内リンク（#slug）の自動クリック対応
+      setupInternalLinks();
+
       renderToc(data.headings);
 
-      document.getElementById('viewMode').classList.remove('hidden');
-      document.getElementById('editMode').classList.add('hidden');
+      document.getElementById('listView').classList.add('hidden');
+      document.getElementById('editView').classList.add('hidden');
+      document.getElementById('detailView').classList.remove('hidden');
+      window.scrollTo(0, 0);
     }
 
-    function showDefaultView() {
+    function showListView() {
       currentNote = null;
-      document.getElementById('viewTitle').textContent = '';
-      document.getElementById('viewBody').textContent = 'ノートを選択してください。';
-      document.getElementById('editBtn').classList.add('hidden');
-      document.getElementById('copyLinkBtn').classList.add('hidden');
-      document.getElementById('tocContainer').classList.add('hidden');
-      document.getElementById('viewMode').classList.remove('hidden');
-      document.getElementById('editMode').classList.add('hidden');
+      window.location.hash = '';
+      document.getElementById('detailView').classList.add('hidden');
+      document.getElementById('editView').classList.add('hidden');
+      document.getElementById('listView').classList.remove('hidden');
     }
 
-    // 見出し抽出
+    // 本文内のハッシュリンク（#slug）をクリックしたときに別ノートを開く処理
+    function setupInternalLinks() {
+      const bodyEl = document.getElementById('viewBody');
+      bodyEl.querySelectorAll('a').forEach(a => {
+        const href = a.getAttribute('href');
+        if (href && href.startsWith('#')) {
+          a.onclick = (e) => {
+            e.preventDefault();
+            const slug = href.substring(1);
+            window.location.hash = slug;
+            loadNoteBySlug(slug);
+          };
+        }
+      });
+    }
+
     function extractHeadings(content) {
       const regex = /^(#{1,6})\s+(.+)$/gm;
       let match;
@@ -226,8 +226,9 @@
       document.getElementById('formSlug').value = '';
       document.getElementById('formContent').value = '';
 
-      document.getElementById('viewMode').classList.add('hidden');
-      document.getElementById('editMode').classList.remove('hidden');
+      document.getElementById('listView').classList.add('hidden');
+      document.getElementById('detailView').classList.add('hidden');
+      document.getElementById('editView').classList.remove('hidden');
     }
 
     function switchToEdit() {
@@ -237,15 +238,27 @@
       document.getElementById('formSlug').value = currentNote.slug;
       document.getElementById('formContent').value = currentNote.content;
 
-      document.getElementById('viewMode').classList.add('hidden');
-      document.getElementById('editMode').classList.remove('hidden');
+      document.getElementById('listView').classList.add('hidden');
+      document.getElementById('detailView').classList.add('hidden');
+      document.getElementById('editView').classList.remove('hidden');
+    }
+
+    // スマホで簡単に折り畳み式見出し（detailsタグ）を挿入する関数
+    function insertDetailsTag() {
+      const textarea = document.getElementById('formContent');
+      const snippet = '\n<details>\n  <summary>見出しタイトル</summary>\n  <p>ここに折り畳まれる長い文章を入力...</p>\n</details>\n';
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      textarea.value = textarea.value.substring(0, start) + snippet + textarea.value.substring(end);
+      textarea.focus();
+      textarea.setSelectionRange(start + 11, start + 21); // 「見出しタイトル」を選択状態にする
     }
 
     function cancelEdit() {
       if (currentNote) {
         loadNoteBySlug(currentNote.slug);
       } else {
-        showDefaultView();
+        showListView();
       }
     }
 
@@ -282,7 +295,6 @@
       loadNoteBySlug(slug);
     }
 
-    // リアルタイム同期
     function setupRealtimeSync() {
       supabaseClient
         .channel('public:notes')
@@ -293,12 +305,6 @@
           }
         })
         .subscribe();
-    }
-
-    function copyNoteLink() {
-      navigator.clipboard.writeText(window.location.href).then(() => {
-        alert('リンクをコピーしました');
-      });
     }
 
     function escapeHtml(str) {
