@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WikiApp with Supabase</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Marked (Markdown用・任意で見出し表現に活用可) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
+
+  <!-- ヘッダー / 検索バー -->
+  <header class="bg-white border-b shadow-sm p-4 flex flex-col md:flex-row justify-between items-center gap-4">
+    <h1 class="text-xl font-bold text-blue-600 cursor-pointer" onclick="loadNotes()">WikiApp</h1>
+    <div class="w-full md:w-1/2 flex gap-2">
+      <input type="text" id="searchInput" placeholder="ノートを全文検索..." class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" oninput="searchNotes(this.value)">
+      <button onclick="openEditor()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-blue-700 whitespace-nowrap">+ 新規作成</button>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 md:grid-cols-4 gap-6">
+    
+    <!-- サイドバー: ノート一覧・見出し目次 -->
+    <aside class="md:col-span-1 bg-white p-4 rounded-lg border shadow-sm flex flex-col gap-4">
+      <h2 class="font-bold text-gray-700 text-sm">ノート一覧</h2>
+      <ul id="notesList" class="space-y-2 overflow-y-auto max-h-[60vh] text-sm">
+        <!-- 動的挿入 -->
+      </ul>
+    </aside>
+
+    <!-- プレビュー / 編集エリア -->
+    <section id="mainContent" class="md:col-span-3 bg-white p-6 rounded-lg border shadow-sm flex flex-col gap-4">
+      <div id="viewMode" class="space-y-4">
+        <div class="flex justify-between items-center border-b pb-4">
+          <h2 id="viewTitle" class="text-2xl font-bold">ようこそ WikiApp へ</h2>
+          <div class="flex gap-2">
+            <button id="editBtn" class="bg-gray-200 px-3 py-1.5 rounded text-sm font-medium hover:bg-gray-300 hidden" onclick="switchToEdit()">編集</button>
+            <button id="copyLinkBtn" class="bg-gray-100 px-3 py-1.5 rounded text-sm font-medium hover:bg-gray-200 hidden" onclick="copyNoteLink()">リンクコピー</button>
+          </div>
+        </div>
+        <!-- 目次表示エリア -->
+        <div id="tocContainer" class="bg-blue-50 p-3 rounded text-sm hidden">
+          <p class="font-bold text-blue-800 mb-1">目次 (見出し)</p>
+          <ul id="tocList" class="list-disc list-inside text-blue-600 space-y-1"></ul>
+        </div>
+        <div id="viewBody" class="prose max-w-none text-gray-700 leading-relaxed">
+          左側のリストからノートを選択するか、新しいノートを作成してください。リアルタイムで他のユーザーの編集が反映されます。
+        </div>
+      </div>
+
+      <!-- 編集・作成フォーム -->
+      <div id="editMode" class="space-y-4 hidden">
+        <input type="hidden" id="editId">
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">タイトル</label>
+          <input type="text" id="formTitle" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" placeholder="ノートのタイトル">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">スラッグ（リンク用ID: 例 my-note）</label>
+          <input type="text" id="formSlug" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" placeholder="my-unique-slug">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">本文 (見出しは `## 見出し名` のように記述できます)</label>
+          <textarea id="formContent" rows="12" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 font-mono" placeholder="本文を入力..."></textarea>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button onclick="cancelEdit()" class="bg-gray-200 px-4 py-2 rounded text-sm">キャンセル</button>
+          <button onclick="saveNote()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-blue-700">保存する</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- JavaScript ロジック -->
+  <script>
+    // --- Supabase 設定 ---
+    // ご自身のSupabaseプロジェクト情報に書き換えてください
+    const SUPABASE_URL = 'https://rympoepuizquiyshthkk.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_ZfYXidv0V0PctH0-yRzjxQ_ZzeQza84';
+    
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let currentNote = null;
+
+    // 初期化とリアルタイム購読のセットアップ
+    window.addEventListener('DOMContentLoaded', () => {
+      loadNotes();
+      setupRealtimeSync();
+
+      // URLのハッシュ（スラッグ）を検知して初期表示
+      const hash = window.location.hash.substring(1);
+      if (hash) {
+        loadNoteBySlug(hash);
+      }
+    });
+
+    // 1. ノート一覧の取得
+    async function loadNotes() {
+      const { data, error } = await supabaseClient
+        .from('notes')
+        .select('id, title, slug')
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('取得エラー:', error);
+        return;
+      }
+
+      const listEl = document.getElementById('notesList');
+      listEl.innerHTML = data.map(note => `
+        <li>
+          <a href="#${note.slug}" onclick="loadNoteBySlug('${note.slug}')" class="text-blue-600 hover:underline block truncate">
+            ${escapeHtml(note.title)}
+          </a>
+        </li>
+      `).join('');
+    }
+
+    // 2. スラッグを指定してノート詳細を読み込み
+    async function loadNoteBySlug(slug) {
+      const { data, error } = await supabaseClient
+        .from('notes')
+        .select('*')
+        .eq('slug', slug)
+        .single();
+
+      if (error || !data) {
+        console.error('ノートが見つかりません:', error);
+        return;
+      }
+
+      currentNote = data;
+      document.getElementById('viewTitle').textContent = data.title;
+      document.getElementById('viewBody').innerHTML = marked.parse(data.content);
+      document.getElementById('editBtn').classList.remove('hidden');
+      document.getElementById('copyLinkBtn').classList.remove('hidden');
+      
+      // 見出し（TOC）の描画
+      renderToc(data.headings);
+
+      // 表示モードに切り替え
+      document.getElementById('viewMode').classList.remove('hidden');
+      document.getElementById('editMode').classList.add('hidden');
+    }
+
+    // 3. 見出し（Headings）の自動抽出しつつ保存・表示
+    function extractHeadings(content) {
+      const regex = /^(#{1,6})\s+(.+)$/gm;
+      let match;
+      let headings = [];
+      while ((match = regex.exec(content)) !== null) {
+        headings.push({ level: match[1].length, text: match[2] });
+      }
+      return headings;
+    }
+
+    function renderToc(headings) {
+      const tocContainer = document.getElementById('tocContainer');
+      const tocList = document.getElementById('tocList');
+      if (!headings || headings.length === 0) {
+        tocContainer.classList.add('hidden');
+        return;
+      }
+      tocContainer.classList.remove('hidden');
+      tocList.innerHTML = headings.map(h => `<li style="margin-left: ${(h.level - 1) * 12}px;">${escapeHtml(h.text)}</li>`).join('');
+    }
+
+    // 4. 新規作成・編集画面の切り替え
+    function openEditor() {
+      document.getElementById('editId').value = '';
+      document.getElementById('formTitle').value = '';
+      document.getElementById('formSlug').value = '';
+      document.getElementById('formContent').value = '';
+
+      document.getElementById('viewMode').classList.add('hidden');
+      document.getElementById('editMode').classList.remove('hidden');
+    }
+
+    function switchToEdit() {
+      if (!currentNote) return;
+      document.getElementById('editId').value = currentNote.id;
+      document.getElementById('formTitle').value = currentNote.title;
+      document.getElementById('formSlug').value = currentNote.slug;
+      document.getElementById('formContent').value = currentNote.content;
+
+      document.getElementById('viewMode').classList.add('hidden');
+      document.getElementById('editMode').classList.remove('hidden');
+    }
+
+    function cancelEdit() {
+      if (currentNote) {
+        loadNoteBySlug(currentNote.slug);
+      } else {
+        document.getElementById('editMode').classList.add('hidden');
+        document.getElementById('viewMode').classList.remove('hidden');
+      }
+    }
+
+    // 5. ノートの保存 (Insert / Update)
+    async function saveNote() {
+      const id = document.getElementById('editId').value;
+      const title = document.getElementById('formTitle').value;
+      const slug = document.getElementById('formSlug').value;
+      const content = document.getElementById('formContent').value;
+      const headings = extractHeadings(content);
+
+      if (!title || !slug || !content) {
+        alert('すべての項目を入力してください。');
+        return;
+      }
+
+      const payload = { title, slug, content, headings };
+      let error;
+
+      if (id) {
+        // 更新
+        const res = await supabaseClient.from('notes').update(payload).eq('id', id);
+        error = res.error;
+      } else {
+        // 新規作成
+        const res = await supabaseClient.from('notes').insert([payload]);
+        error = res.error;
+      }
+
+      if (error) {
+        alert('保存に失敗しました: ' + error.message);
+        return;
+      }
+
+      window.location.hash = slug;
+      loadNotes();
+      loadNoteBySlug(slug);
+    }
+
+    // 6. 全文検索機能
+    async function searchNotes(query) {
+      if (!query.trim()) {
+        loadNotes();
+        return;
+      }
+
+      const { data, error } = await supabaseClient
+        .from('notes')
+        .select('id, title, slug')
+        .textSearch('search_vector', query);
+
+      if (error) {
+        console.error('検索エラー:', error);
+        return;
+      }
+
+      const listEl = document.getElementById('notesList');
+      listEl.innerHTML = data.length ? data.map(note => `
+        <li>
+          <a href="#${note.slug}" onclick="loadNoteBySlug('${note.slug}')" class="text-blue-600 hover:underline block truncate">
+            ${escapeHtml(note.title)}
+          </a>
+        </li>
+      `).join('') : '<li class="text-gray-400">一致するノートなし</li>';
+    }
+
+    // 7. リアルタイム同期 (Supabase Realtime)
+    function setupRealtimeSync() {
+      supabaseClient
+        .channel('public:notes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, payload => {
+          loadNotes();
+          if (currentNote && payload.new && payload.new.id === currentNote.id) {
+            loadNoteBySlug(payload.new.slug);
+          }
+        })
+        .subscribe();
+    }
+
+    // 8. リンクとして別の場所に貼るための共有機能
+    function copyNoteLink() {
+      const url = window.location.href;
+      navigator.clipboard.writeText(url).then(() => {
+        alert('ノートのリンクをコピーしました！');
+      });
+    }
+
+    // 補助関数: 簡易エスケープ
+    function escapeHtml(str) {
+      return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+  </script>
+</body>
+</html>
